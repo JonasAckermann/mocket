@@ -61,17 +61,29 @@ object Mocket extends IndigoSandbox[Unit, Model] {
       .addGameLayerNodes(
       drawRocket(model.rockets)
     )
+    .withLights(drawLights(model.rockets))
 
   def drawRocket(
       rockets: List[Rocket]
   ): List[Graphic] =
     rockets.map(rocket =>
-      Graphic(Rectangle(0, 0, 512, 1204), 1, Material.Textured(assetName))
+      Graphic(Rectangle(0, 0, 512, 1204), 1, Material.Textured(assetName).lit)
         .withRef(256, 1204)
         .scaleBy(0.25, 0.25)
         .rotate(rocket.angle)
         .moveTo(rocket.location)
     )
+
+  def drawLights(rockets: List[Rocket]): List[PointLight] =
+    rockets.map(rocket => rocket.state match {
+      case Boom(_) => PointLight.default
+        .moveTo(rocket.location)
+        .withAttenuation(500) // How far the light fades out to
+        .withColor(RGB.Cyan)
+        .withHeight(100)
+        .withPower(20)
+      case _ => PointLight.default.withPower(0.0)
+    })
 
 
 }
@@ -89,7 +101,7 @@ object Model {
 case class Rocket(location: Point, angle: Radians, rotateBy: Radians, explodeAt: Int, state: RocketState) {
   def update(timeDelta: Seconds): Rocket = state match {
     case Waiting => this
-    case Flying if location.y < explodeAt => this.copy(state = Boom(0))
+    case Flying if location.y < explodeAt => this.copy(state = Boom(20))
     case Flying =>
       val newAngle = angle + rotateBy
       val distance = (60.0*35*timeDelta.value)
@@ -97,6 +109,7 @@ case class Rocket(location: Point, angle: Radians, rotateBy: Radians, explodeAt:
       val newX = location.x - (distance*Math.sin(newAngle.value))
       val newY = location.y - (distance*Math.cos(newAngle.value))
       this.copy(location = Point(newX.toInt, newY.toInt ), angle = newAngle )
+    case Boom(frame) if frame > 0 => this.copy(state = Boom(frame - 1))
     case Boom(_) => this.copy(location = Point(10000, 10000), state = Waiting) // TODO explodey steps
   }
 }
